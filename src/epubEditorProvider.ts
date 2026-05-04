@@ -41,7 +41,11 @@ export class EpubEditorProvider implements vscode.CustomReadonlyEditorProvider {
     const savedLocation = this.context.globalState.get<string>(
       `epub-location:${document.uri.toString()}`
     );
+    const savedBookmarks = this.context.globalState.get<any[]>(
+      `epub-bookmarks:${document.uri.toString()}`
+    );
     log.appendLine(`[resolveCustomEditor] Saved location: ${savedLocation || '(none)'}`);
+    log.appendLine(`[resolveCustomEditor] Saved bookmarks: ${savedBookmarks?.length ?? 0}`);
 
     webviewPanel.webview.onDidReceiveMessage(
       (message) => {
@@ -52,6 +56,7 @@ export class EpubEditorProvider implements vscode.CustomReadonlyEditorProvider {
             type: 'loadBook',
             data: Array.from(fileData),
             location: savedLocation || undefined,
+            bookmarks: savedBookmarks || [],
           });
           return;
         }
