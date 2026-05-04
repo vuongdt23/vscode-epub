@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ReactReader } from 'react-reader';
-import type { NavItem, Rendition, Location } from 'epubjs';
+import type { NavItem, Rendition } from 'epubjs';
 
 interface VSCodeApi {
   postMessage(message: any): void;
@@ -87,12 +87,15 @@ function App() {
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const message = event.data;
+      if (!message.type) return; // Ignore internal browser/epub.js noise
+      console.log('[EPUB] Message received:', message.type);
       switch (message.type) {
         case 'loadBook': {
-          console.log('[EPUB] Received loadBook, data length:', message.data.length);
+          console.log('[EPUB] loadBook — data length:', message.data.length, 'saved location:', message.location || '(none)');
           const arrayBuffer = new Uint8Array(message.data).buffer;
           setBookUrl(arrayBuffer);
           if (message.location) {
+            console.log('[EPUB] Restoring saved location:', message.location.slice(0, 60));
             setLocation(message.location);
           }
           break;
@@ -100,7 +103,7 @@ function App() {
       }
     };
     window.addEventListener('message', handler);
-    console.log('[EPUB] Webview ready, sending ready message');
+    console.log('[EPUB] Webview mounted, sending ready signal');
     vscode.postMessage({ type: 'ready' });
     return () => window.removeEventListener('message', handler);
   }, []);
@@ -117,6 +120,7 @@ function App() {
       for (const entry of entries) {
         const width = entry.contentRect.width;
         const spread = shouldUseSpread(width);
+        console.log(`[EPUB] Resize: ${Math.round(width)}px, screen: ${window.screen.width}px, spread: ${spread}`);
         setIsSpread(spread);
         if (renditionRef.current) {
           renditionRef.current.spread(spread ? 'auto' : 'none');
@@ -129,15 +133,21 @@ function App() {
     return () => observer.disconnect();
   }, [bookUrl]);
 
-  const updateProgress = useCallback((cfi: string) => {
+  const updateProgress = useCallback((loc: string) => {
     if (!renditionRef.current) return;
-    const book = renditionRef.current.book;
-    const pct = book.locations.percentageFromCfi(cfi);
-    setProgress(pct * 100);
-    const locIndex = book.locations.locationFromCfi(cfi);
-    const total = book.locations.length();
-    setCurrentPage(locIndex + 1);
-    setTotalPages(total);
+    // Only process valid CFI strings — skip raw hrefs from TOC navigation
+    if (!loc || !loc.startsWith('epubcfi(')) return;
+    try {
+      const book = renditionRef.current.book;
+      const pct = book.locations.percentageFromCfi(loc);
+      setProgress((pct || 0) * 100);
+      const locIndex = book.locations.locationFromCfi(loc);
+      const total = book.locations.length();
+      setCurrentPage((locIndex || 0) + 1);
+      setTotalPages(total);
+    } catch (err) {
+      console.warn('[EPUB] updateProgress failed:', loc?.slice(0, 50), err);
+    }
   }, []);
 
   // Recalculate progress when locations become ready
@@ -148,11 +158,15 @@ function App() {
   }, [locationsReady, location, updateProgress]);
 
   const onLocationChanged = useCallback((newLocation: string) => {
-    setLocation(newLocation);
-    vscode.postMessage({ type: 'locationChanged', location: newLocation });
+    try {
+      setLocation(newLocation);
+      vscode.postMessage({ type: 'locationChanged', location: newLocation });
 
-    if (renditionRef.current && locationsReady) {
-      updateProgress(newLocation);
+      if (renditionRef.current && locationsReady) {
+        updateProgress(newLocation);
+      }
+    } catch (err) {
+      console.error('[EPUB] onLocationChanged error:', err);
     }
   }, [locationsReady, updateProgress]);
 
@@ -410,6 +424,7 @@ function App() {
             tocChanged={onTocChanged}
             showToc={false}
             getRendition={(rendition) => {
+              console.log('[EPUB] getRendition called');
               renditionRef.current = rendition;
               applyTheme(rendition);
               rendition.themes.override('line-height', '1.6');
@@ -417,6 +432,7 @@ function App() {
               // Inject CSS to constrain wide content (tables, images)
               rendition.themes.register('custom', {});
               rendition.hooks.content.register((contents: any) => {
+                console.log('[EPUB] Content hook fired — injecting constraint CSS');
                 const doc = contents.document;
                 const style = doc.createElement('style');
                 style.textContent = `
@@ -450,17 +466,29 @@ function App() {
               });
 
               // Generate locations for absolute progress tracking
+              console.log('[EPUB] Generating book locations...');
               rendition.book.ready.then(() => {
+                console.log('[EPUB] Book ready, generating locations (this may take a moment)');
                 return rendition.book.locations.generate(1024);
               }).then(() => {
+                const total = rendition.book.locations.length();
+                console.log(`[EPUB] Locations generated: ${total} total locations`);
                 setLocationsReady(true);
-                setTotalPages(rendition.book.locations.length());
+                setTotalPages(total);
+              }).catch((err: any) => {
+                console.error('[EPUB] Error generating locations:', err);
+              });
+
+              // Log rendition errors
+              rendition.on('displayError', (err: any) => {
+                console.error('[EPUB] Display error:', err);
               });
 
               // Set initial spread based on current width
               const el = readerAreaRef.current;
               if (el) {
                 const spread = el.clientWidth >= window.screen.width * SPREAD_SCREEN_RATIO;
+                console.log(`[EPUB] Initial spread: ${spread} (container: ${el.clientWidth}px, screen: ${window.screen.width}px)`);
                 rendition.spread(spread ? 'auto' : 'none');
               }
             }}
