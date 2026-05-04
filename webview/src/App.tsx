@@ -66,7 +66,10 @@ const THEME_CONFIG = {
 
 function App() {
   const [bookUrl, setBookUrl] = useState<ArrayBuffer | null>(null);
-  const [location, setLocation] = useState<string | number>(0);
+  // location is only set for explicit jumps (TOC, bookmarks, slider, initial load)
+  // After the jump completes, it's cleared to undefined so react-reader controls navigation
+  const [location, setLocation] = useState<string | number | undefined>(0);
+  const currentCfiRef = useRef<string>(''); // tracks current position without re-renders
   const [theme, setTheme] = useState<Theme>('light');
   const [fontSize, setFontSize] = useState(100);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
@@ -152,14 +155,16 @@ function App() {
 
   // Recalculate progress when locations become ready
   useEffect(() => {
-    if (locationsReady && typeof location === 'string' && location) {
-      updateProgress(location);
+    if (locationsReady && currentCfiRef.current) {
+      updateProgress(currentCfiRef.current);
     }
-  }, [locationsReady, location, updateProgress]);
+  }, [locationsReady, updateProgress]);
 
   const onLocationChanged = useCallback((newLocation: string) => {
     try {
-      setLocation(newLocation);
+      currentCfiRef.current = newLocation;
+      // Clear the controlled location so react-reader handles prev/next freely
+      setLocation(undefined);
       vscode.postMessage({ type: 'locationChanged', location: newLocation });
 
       if (renditionRef.current && locationsReady) {
@@ -190,11 +195,12 @@ function App() {
     [toc]
   );
 
+  // Update chapter name when progress changes (progress updates on every page turn)
   useEffect(() => {
-    if (typeof location === 'string') {
-      findCurrentChapter(location);
+    if (currentCfiRef.current) {
+      findCurrentChapter(currentCfiRef.current);
     }
-  }, [location, findCurrentChapter]);
+  }, [progress, findCurrentChapter]);
 
   const removeBookmark = useCallback((index: number) => {
     setBookmarks((prev) => {
@@ -204,25 +210,30 @@ function App() {
     });
   }, []);
 
-  const addBookmark = useCallback(() => {
-    if (typeof location === 'string') {
-      // Prevent duplicate bookmarks at the same location
-      const alreadyExists = bookmarks.some((bm) => bm.location === location);
-      if (alreadyExists) return;
+  const isCurrentPageBookmarked = bookmarks.some((bm) => bm.location === currentCfiRef.current);
 
-      const bookmark: Bookmark = {
-        location,
-        label: `Page ${currentPage}`,
-        chapter: currentChapter || 'Unknown chapter',
-        timestamp: Date.now(),
-      };
-      setBookmarks((prev) => {
-        const updated = [...prev, bookmark];
-        vscode.postMessage({ type: 'updateBookmarks', bookmarks: updated });
-        return updated;
-      });
+  const toggleBookmark = useCallback(() => {
+    const cfi = currentCfiRef.current;
+    if (!cfi) return;
+
+    const existingIndex = bookmarks.findIndex((bm) => bm.location === cfi);
+    if (existingIndex >= 0) {
+      removeBookmark(existingIndex);
+      return;
     }
-  }, [location, currentPage, currentChapter, bookmarks]);
+
+    const bookmark: Bookmark = {
+      location: cfi,
+      label: `Page ${currentPage}`,
+      chapter: currentChapter || 'Unknown chapter',
+      timestamp: Date.now(),
+    };
+    setBookmarks((prev) => {
+      const updated = [...prev, bookmark];
+      vscode.postMessage({ type: 'updateBookmarks', bookmarks: updated });
+      return updated;
+    });
+  }, [currentPage, currentChapter, bookmarks, removeBookmark]);
 
   const applyTheme = useCallback(
     (rendition: Rendition) => {
@@ -315,9 +326,13 @@ function App() {
             </button>
           </div>
 
-          {/* Bookmark */}
-          <button className="icon-btn" onClick={addBookmark} aria-label="Bookmark this page">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          {/* Bookmark toggle */}
+          <button
+            className={`icon-btn ${isCurrentPageBookmarked ? 'active' : ''}`}
+            onClick={toggleBookmark}
+            aria-label={isCurrentPageBookmarked ? 'Remove bookmark' : 'Bookmark this page'}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill={isCurrentPageBookmarked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8">
               <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
             </svg>
           </button>

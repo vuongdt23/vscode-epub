@@ -119,6 +119,7 @@ html, body, #root {
   background: transparent;
   color: var(--c-fg);
   cursor: pointer;
+  outline: none;
   transition: background 0.15s ease;
 }
 
