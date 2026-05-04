@@ -60,14 +60,11 @@ export class EpubEditorProvider implements vscode.CustomReadonlyEditorProvider {
           message.location
         );
         break;
-      case 'saveBookmark':
-        const key = `epub-bookmarks:${uri.toString()}`;
-        const bookmarks = this.context.globalState.get<any[]>(key) || [];
-        bookmarks.push(message.bookmark);
-        this.context.globalState.update(key, bookmarks);
-        break;
-      case 'getBookmarks':
-        // Will be handled via response message
+      case 'updateBookmarks':
+        this.context.globalState.update(
+          `epub-bookmarks:${uri.toString()}`,
+          message.bookmarks
+        );
         break;
     }
   }

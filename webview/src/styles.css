@@ -358,9 +358,24 @@ html, body, #root {
   padding: 0 8px;
 }
 
+.bookmark-row {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  transition: background 0.12s ease;
+}
+
+.bookmark-row:hover {
+  background: var(--c-toc-hover);
+}
+
+.bookmark-row:hover .bookmark-delete {
+  opacity: 1;
+}
+
 .bookmark-item {
   display: block;
-  width: 100%;
+  flex: 1;
   text-align: left;
   padding: 12px;
   border: none;
@@ -369,11 +384,27 @@ html, body, #root {
   color: var(--c-fg);
   font-family: inherit;
   cursor: pointer;
-  transition: background 0.12s ease;
 }
 
-.bookmark-item:hover {
-  background: var(--c-toc-hover);
+.bookmark-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--c-muted);
+  cursor: pointer;
+  opacity: 0;
+  margin-right: 8px;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.bookmark-delete:hover {
+  background: rgba(220, 60, 60, 0.12);
+  color: #dc3c3c;
 }
 
 .bookmark-info {

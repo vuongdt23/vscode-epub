@@ -182,18 +182,33 @@ function App() {
     }
   }, [location, findCurrentChapter]);
 
+  const removeBookmark = useCallback((index: number) => {
+    setBookmarks((prev) => {
+      const updated = prev.filter((_, i) => i !== index);
+      vscode.postMessage({ type: 'updateBookmarks', bookmarks: updated });
+      return updated;
+    });
+  }, []);
+
   const addBookmark = useCallback(() => {
     if (typeof location === 'string') {
+      // Prevent duplicate bookmarks at the same location
+      const alreadyExists = bookmarks.some((bm) => bm.location === location);
+      if (alreadyExists) return;
+
       const bookmark: Bookmark = {
         location,
         label: `Page ${currentPage}`,
         chapter: currentChapter || 'Unknown chapter',
         timestamp: Date.now(),
       };
-      setBookmarks((prev) => [...prev, bookmark]);
-      vscode.postMessage({ type: 'saveBookmark', bookmark });
+      setBookmarks((prev) => {
+        const updated = [...prev, bookmark];
+        vscode.postMessage({ type: 'updateBookmarks', bookmarks: updated });
+        return updated;
+      });
     }
-  }, [location, currentPage, currentChapter]);
+  }, [location, currentPage, currentChapter, bookmarks]);
 
   const applyTheme = useCallback(
     (rendition: Rendition) => {
@@ -359,12 +374,21 @@ function App() {
                     ) : (
                       <ul className="bookmarks-list">
                         {bookmarks.map((bm, i) => (
-                          <li key={i}>
+                          <li key={i} className="bookmark-row">
                             <button className="bookmark-item" onClick={() => { setLocation(bm.location); setOpenPanel(null); }}>
                               <div className="bookmark-info">
                                 <span className="bookmark-chapter">{bm.chapter}</span>
                                 <span className="bookmark-meta">{bm.label} &middot; {new Date(bm.timestamp).toLocaleDateString()}</span>
                               </div>
+                            </button>
+                            <button
+                              className="bookmark-delete"
+                              onClick={(e) => { e.stopPropagation(); removeBookmark(i); }}
+                              aria-label="Delete bookmark"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 6L6 18M6 6l12 12" />
+                              </svg>
                             </button>
                           </li>
                         ))}
