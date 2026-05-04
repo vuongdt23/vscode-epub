@@ -1,0 +1,49 @@
+{
+  "name": "vscode-epub-reader",
+  "displayName": "EPUB Reader",
+  "description": "A full-featured EPUB reader for VS Code",
+  "version": "0.1.0",
+  "publisher": "vscode-epub",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "epubReader.viewer",
+        "displayName": "EPUB Reader",
+        "selector": [
+          {
+            "filenamePattern": "*.epub"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "epubReader.openFile",
+        "title": "Open EPUB File",
+        "category": "EPUB Reader"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "npm run build:extension && npm run build:webview",
+    "build:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "build:webview": "cd webview && npm run build",
+    "watch:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+    "dev": "concurrently \"npm run watch:extension\" \"cd webview && npm run dev\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "concurrently": "^8.2.2",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.3"
+  }
+}
